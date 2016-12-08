@@ -4,11 +4,11 @@ import socket
 import thread
 
 # topo
-TOPO = [{ "A": [ {"ip": ("127.0.0.1", 8090)}, {"B": 7}, {"E": 3} ] },
-        { "B": [ {"ip": ("127.0.0.1", 8091)}, {"A": 3}, {"C": 5}, {"D": 4} ] },
-        { "C": [ {"ip": ("127.0.0.1", 8092)}, {"D": 10}, {"E": 5} ] },
-        { "D": [ {"ip": ("127.0.0.1", 8093)}, {"B": 5}, {"C": 10}, {"E": 4} ] },
-        { "E": [ {"ip": ("127.0.0.1", 8094)}, {"A": 3}, {"C": 5}, {"D": 4} ] }]
+TOPO = [{ "A": [ {"B": 7}, {"E": 3} ] },
+        { "B": [ {"A": 3}, {"C": 5}, {"D": 4} ] },
+        { "C": [ {"D": 10}, {"E": 5} ] },
+        { "D": [ {"B": 5}, {"C": 10}, {"E": 4} ] },
+        { "E": [ {"A": 3}, {"C": 5}, {"D": 4} ] }]
 
 
 class ChatClient(Frame):
@@ -31,7 +31,7 @@ class ChatClient(Frame):
     self.root.title("Routing")
     ScreenSizeX = self.root.winfo_screenwidth()
     ScreenSizeY = self.root.winfo_screenheight()
-    self.FrameSizeX  = 1000
+    self.FrameSizeX  = 900
     self.FrameSizeY  = 600
     FramePosX   = (ScreenSizeX - self.FrameSizeX)/2
     FramePosY   = (ScreenSizeY - self.FrameSizeY)/2
@@ -55,14 +55,14 @@ class ChatClient(Frame):
     self.serverPortVar.set("8090")
     serverPortField = Entry(ipGroup, width=5, textvariable=self.serverPortVar)
     serverSetButton = Button(ipGroup, text="Set", width=10, command=self.handleSetServer)
-    addClientLabel = Label(ipGroup, text="Set Destination: ")
+    addClientLabel = Label(ipGroup, text="Set Conn: ")
     self.clientIPVar = StringVar()
     self.clientIPVar.set("127.0.0.1")
     clientIPField = Entry(ipGroup, width=15, textvariable=self.clientIPVar)
     self.clientPortVar = StringVar()
     self.clientPortVar.set("8091")
     clientPortField = Entry(ipGroup, width=5, textvariable=self.clientPortVar)
-    clientSetButton = Button(ipGroup, text="Add", width=10, command=self.handleAddClient)
+    clientSetButton = Button(ipGroup, text="Add", width=10, command=self.handleSetConn)
     serverLabel.grid(row=0, column=0)
     nameField.grid(row=0, column=1)
     serverIPField.grid(row=0, column=2)
@@ -74,10 +74,24 @@ class ChatClient(Frame):
     clientSetButton.grid(row=0, column=8, padx=5)
     
     readChatGroup = Frame(parentFrame)
-    self.receivedChats = Text(readChatGroup, bg="white", width=60, height=30, state=DISABLED)
-    self.friends = Listbox(readChatGroup, bg="white", width=30, height=30)
+    self.receivedChats = Text(readChatGroup, bg="white", width=60, height=27, state=DISABLED)
+    self.friends = Listbox(readChatGroup, bg="white", width=30, height=27)
     self.receivedChats.grid(row=0, column=0, sticky=W+N+S, padx = (0,10))
     self.friends.grid(row=0, column=1, sticky=E+N+S)
+
+    sendMsgGroup = Frame(parentFrame)
+    sendLabel = Label(sendMsgGroup, text="Send To: ")
+    self.sendIPVar = StringVar()
+    self.sendIPVar.set("127.0.0.1")
+    sendIPField = Entry(sendMsgGroup, width=15, textvariable=self.sendIPVar)
+    self.sendPortVar = StringVar()
+    self.sendPortVar.set("8091")
+    sendPortField = Entry(sendMsgGroup, width=5, textvariable=self.sendPortVar)
+    sendSetButton = Button(sendMsgGroup, text="Add", width=10, command=self.handleSendIP)
+    sendLabel.grid(row=0, column=1)
+    sendIPField.grid(row=0, column=2)
+    sendPortField.grid(row=0, column=3)
+    sendSetButton.grid(row=0, column=4, padx=5)
 
     writeChatGroup = Frame(parentFrame)
     self.chatVar = StringVar()
@@ -88,13 +102,12 @@ class ChatClient(Frame):
 
     self.statusLabel = Label(parentFrame)
 
-    bottomLabel = Label(parentFrame, text="Created by Siddhartha Sahu (sh.siddhartha@gmail.com) under Prof. A. Prakash [Computer Networks, Dept. of CSE, BIT Mesra]")
-    
     ipGroup.grid(row=0, column=0)
     readChatGroup.grid(row=1, column=0)
-    writeChatGroup.grid(row=2, column=0, pady=10)
-    self.statusLabel.grid(row=3, column=0)
-    bottomLabel.grid(row=4, column=0, pady=10)
+    sendMsgGroup.grid(row=2, column=0)
+    writeChatGroup.grid(row=3, column=0, pady=10)
+    self.statusLabel.grid(row=4, column=0)
+
     
   def handleSetServer(self):
     if self.serverSoc != None:
@@ -103,43 +116,25 @@ class ChatClient(Frame):
       self.serverStatus = 0
     serveraddr = (self.serverIPVar.get().replace(' ',''), int(self.serverPortVar.get().replace(' ','')))
     
-    _tag = self.checkInTopo(addr=serveraddr)
-    print _tag
-    if _tag:
-      try:
-        self.serverSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serverSoc.bind(serveraddr)
-        self.serverSoc.listen(5)
-        self.setStatus("Server listening on %s:%s" % serveraddr)
-        thread.start_new_thread(self.listenClients,())
-        self.serverStatus = 1
-        self.name = self.nameVar.get().replace(' ','')
-        self.tag = _tag
-        if self.name == '':
-          self.name = "%s:%s" % serveraddr
-      except:
-        self.setStatus("Error setting up server")
-    else:
-      print "You can't connect to the specified Internet!"
 
-  # check whether the addr is in the topo
-  def checkInTopo(self, addr):
-    for client in TOPO:
-      if addr == client.values()[0][0]["ip"]:
-        return client.keys()[0]
-    return 0
-    
-  def listenClients(self):
-    while 1:
-      clientsoc, clientaddr = self.serverSoc.accept()
-      print "clientsoc: %s, clientaddr: %s", clientsoc, clientaddr
-      self.setStatus("Client connected from %s:%s" % clientaddr)
-      self.addClient(clientsoc, clientaddr)
-      thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-    self.serverSoc.close()
+    try:
+      self.serverSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      self.serverSoc.bind(serveraddr)
+      self.serverSoc.listen(5)
+      self.setStatus("Server listening on %s:%s" % serveraddr)
+      thread.start_new_thread(self.listenClients,())
+      self.serverStatus = 1
+      self.name = self.nameVar.get().replace(' ','')
+      if self.name == '':
+        self.name = "%s:%s" % serveraddr
+    except:
+      self.setStatus("Error setting up server")
+
+  def handleSendIP():
+    pass
 
   
-  def handleAddClient(self):
+  def handleSetConn(self):
     if self.serverStatus == 0:
       self.setStatus("Set server address first")
       return
@@ -153,6 +148,22 @@ class ChatClient(Frame):
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
     except:
         self.setStatus("Error connecting to client")
+
+
+  # check whether the addr is in the topo
+  def checkInTopo(self, addr):
+    
+    return 0
+    
+  def listenClients(self):
+    while 1:
+      clientsoc, clientaddr = self.serverSoc.accept()
+      print "clientsoc: %s, clientaddr: %s", clientsoc, clientaddr
+      self.setStatus("Client connected from %s:%s" % clientaddr)
+      self.addClient(clientsoc, clientaddr)
+      thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
+    self.serverSoc.close()
+
 
   def handleClientMessages(self, clientsoc, clientaddr):
     while 1:
