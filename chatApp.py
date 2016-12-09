@@ -10,6 +10,14 @@ TOPO = [{ "A": [ {"B": 7}, {"E": 3} ] },
         { "D": [ {"B": 5}, {"C": 10}, {"E": 4} ] },
         { "E": [ {"A": 3}, {"C": 5}, {"D": 4} ] }]
 
+_EMPTY_ = 0
+_BUSY_ = 1
+
+_ON_ = 1
+_DOWN_ = 0
+
+_DV_ALGORITHM_ = "DV"
+_LS_ALGORITHM_ = "LS"
 
 class ChatClient(Frame):
   
@@ -22,10 +30,11 @@ class ChatClient(Frame):
     self.buffsize = 1024
     self.allClients = {}
     self.allClientAddrs = {}
+    self.ports = {"0": _EMPTY_, "1": _EMPTY_, "2": _EMPTY_, "3": _EMPTY_}
     self.counter = 0
 
     # routint table
-    self.routingTable = []
+    self.routingTable = {}
   
   def initUI(self):
     self.root.title("Routing")
@@ -87,7 +96,7 @@ class ChatClient(Frame):
     self.sendPortVar = StringVar()
     self.sendPortVar.set("8091")
     sendPortField = Entry(sendMsgGroup, width=5, textvariable=self.sendPortVar)
-    sendSetButton = Button(sendMsgGroup, text="Add", width=10, command=self.handleSendIP)
+    sendSetButton = Button(sendMsgGroup, text="Set", width=10, command=self.handleSendIP)
     sendLabel.grid(row=0, column=1)
     sendIPField.grid(row=0, column=2)
     sendPortField.grid(row=0, column=3)
@@ -116,7 +125,6 @@ class ChatClient(Frame):
       self.serverStatus = 0
     serveraddr = (self.serverIPVar.get().replace(' ',''), int(self.serverPortVar.get().replace(' ','')))
     
-
     try:
       self.serverSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self.serverSoc.bind(serveraddr)
@@ -127,11 +135,14 @@ class ChatClient(Frame):
       self.name = self.nameVar.get().replace(' ','')
       if self.name == '':
         self.name = "%s:%s" % serveraddr
+      self.addr = serveraddr
     except:
       self.setStatus("Error setting up server")
 
-  def handleSendIP():
-    pass
+  def handleSendIP(self):
+    sendaddr = (self.sendIPVar.get().replace(' ',''), int(self.sendPortVar.get().replace(' ','')))
+    self.sendaddr = sendaddr
+    self.setStatus("Set client %s:%s to send" % sendaddr)
 
   
   def handleSetConn(self):
@@ -139,15 +150,18 @@ class ChatClient(Frame):
       self.setStatus("Set server address first")
       return
     clientaddr = (self.clientIPVar.get().replace(' ',''), int(self.clientPortVar.get().replace(' ','')))
-    try:
-        clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # print "clientsoc:", clientsoc
-        clientsoc.connect(clientaddr)
-        self.setStatus("Connected to client on %s:%s" % clientaddr)
-        self.addClient(clientsoc, clientaddr)
-        thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-    except:
-        self.setStatus("Error connecting to client")
+    if clientaddr == self.addr:
+      print "You cannot connect to yourself!"
+    else:
+      try:
+          clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          # print "clientsoc:", clientsoc
+          clientsoc.connect(clientaddr)
+          self.setStatus("Connected to client on %s:%s" % clientaddr)
+          self.addClient(clientsoc, clientaddr)
+          thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
+      except:
+          self.setStatus("Error connecting to client")
 
 
   # check whether the addr is in the topo
@@ -187,13 +201,37 @@ class ChatClient(Frame):
     if msg == '':
         return
     self.addChat("me", msg)
-    for client in self.allClientAddrs:
-      client_addr = self.allClientAddrs[client]
-      index = self.friends.curselection()
-      item = self.friends.get(index)
-      des_addr = item.split(':')
-      if client_addr[0] == des_addr[0] and str(client_addr[1]) == des_addr[1]:
-        client.send(msg)
+
+    _port = self.getRoute()
+    if _port:
+      # send
+      # self.sendToPort(_port)
+
+      for client in self.routingTable:
+        print "client:", client
+        if self.routingTable[client]["state"] == _ON_:
+          if client == self.sendaddr:
+            soc = self.routingTable[client]["clientsoc"]
+            soc.send(msg)
+        else:
+          pass
+    else:
+      self.setStatus("Time out! Maybe the specified client is not on!")
+
+  # send to the port which is calculated by algorithm and send to the client
+  def sendToPort(self, _port):
+    for client in self.routingTable:
+        target_client = self.routingTable[client]
+        if target_client["port"] == _port and target_client["state"] == _ON_:
+          if client == self.sendaddr:
+            soc = target_client["clientsoc"]
+            soc.send(msg)
+
+  #get route
+  def getRoute(self):
+    _port = 1
+    # return the port which the msg is sent to
+    return _port
   
   def addChat(self, client, msg):
     self.receivedChats.config(state=NORMAL)
@@ -205,13 +243,30 @@ class ChatClient(Frame):
     self.allClientAddrs[clientsoc] = clientaddr
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
-  
+    self.updateRoutingTable(clientsoc, clientaddr)
+
   def removeClient(self, clientsoc, clientaddr):
     print self.allClients
     self.friends.delete(self.allClients[clientsoc])
     del self.allClients[clientsoc]
     del self.allClientAddrs[clientsoc]
+    self.routingTable[clientaddr]["state"] = _DOWN_
     print self.allClients
+
+  def allocatePort(self):
+    for port in self.ports:
+      if self.ports[port] == _EMPTY_:
+        return port
+    return 0
+
+  def updateRoutingTable(self, clientsoc, clientaddr):
+    _port = self.allocatePort()
+    if _port:
+      print _port
+      self.routingTable[clientaddr] = {"port": _port, "clientsoc": clientsoc, "state": _ON_}
+      self.ports[_port] = _BUSY_
+    else:
+      print "Ports has been full!"
   
   def setStatus(self, msg):
     self.statusLabel.config(text=msg)
