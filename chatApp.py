@@ -196,11 +196,12 @@ class ChatClient(Frame):
         data = str(data)
         data = json.loads(data)
         print "data:", data
+        print data["tag"] == _MESSAGE_
         if data["tag"] == _MESSAGE_:
-          self.addChat("%s:%s" % clientaddr, data)
+          self.addChat("%s:%s" % clientaddr, data["msg"])
         elif data["tag"] == _BROADCAST_:
           self.TOPO = data["TOPO"]
-          self.updateRoutingTable(data["sender"], data["routingTable"])
+          # self.updateRoutingTable(data["sender"], data["routingTable"])
       except:
         break
     self.removeClient(clientsoc, clientaddr)
@@ -217,10 +218,9 @@ class ChatClient(Frame):
         return
     self.addChat("me", msg)
 
-    _port = self.getRoute()
+    # _port = self.getRoute()
+    _port = 1
     if _port:
-      # send
-      # self.sendToPort(_port)
 
       for client in self.routingTable:
         print "client:", client
@@ -231,8 +231,8 @@ class ChatClient(Frame):
                 datagram = {}
                 datagram["tag"] = _MESSAGE_
                 datagram["msg"] = msg
-                datagram["sender"] = self.addr
-                datagram["routingTable"] = self.routingTable
+                datagram["sender"] = str(self.addr)
+                datagram["routingTable"] = str(self.routingTable)
                 client_soc.send(json.dumps(datagram))
                 break
         else:
@@ -303,7 +303,7 @@ class ChatClient(Frame):
       self.ports[_port] = clientaddr
     else:
       print "Ports has been full!"
-    self.broadcastRoutingTable(clientaddr)
+    # self.broadcastRoutingTable(clientaddr)
 
   def removeClient(self, clientsoc, clientaddr):
     print self.allClients
