@@ -2,13 +2,15 @@ from Tkinter import *
 from ttk import *
 import socket
 import thread
+import json
+import RoutingAlgorithm as RA
 
 # topo
-TOPO = [{ "A": [ {"B": 7}, {"E": 3} ] },
-        { "B": [ {"A": 3}, {"C": 5}, {"D": 4} ] },
-        { "C": [ {"D": 10}, {"E": 5} ] },
-        { "D": [ {"B": 5}, {"C": 10}, {"E": 4} ] },
-        { "E": [ {"A": 3}, {"C": 5}, {"D": 4} ] }]
+# TOPO = { "A": [ "B", "E" ] ,
+#          "B": [ "A", "C", "D" ] ,
+#          "C": [ "D", "E" ] ,
+#          "D": [ "B", "C", "E" ] ,
+#          "E": [ "A", "C", "D" ] }
 
 _EMPTY_ = 0
 _BUSY_ = 1
@@ -18,6 +20,9 @@ _DOWN_ = 0
 
 _DV_ALGORITHM_ = "DV"
 _LS_ALGORITHM_ = "LS"
+
+_MESSAGE_ = "MESSAGE"
+_BROADCAST_ = "BROADCAST"
 
 class ChatClient(Frame):
   
@@ -32,6 +37,7 @@ class ChatClient(Frame):
     self.allClientAddrs = {}
     self.ports = {"0": _EMPTY_, "1": _EMPTY_, "2": _EMPTY_, "3": _EMPTY_}
     self.counter = 0
+    self.TOPO = {}
 
     # routint table
     self.routingTable = {}
@@ -136,6 +142,7 @@ class ChatClient(Frame):
       if self.name == '':
         self.name = "%s:%s" % serveraddr
       self.addr = serveraddr
+      self.TOPO[self.addr] = []
     except:
       self.setStatus("Error setting up server")
 
@@ -154,14 +161,14 @@ class ChatClient(Frame):
       print "You cannot connect to yourself!"
     else:
       try:
-          clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-          # print "clientsoc:", clientsoc
-          clientsoc.connect(clientaddr)
-          self.setStatus("Connected to client on %s:%s" % clientaddr)
-          self.addClient(clientsoc, clientaddr)
-          thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
+        clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # print "clientsoc:", clientsoc
+        clientsoc.connect(clientaddr)
+        self.setStatus("Connected to client on %s:%s" % clientaddr)
+        self.addClient(clientsoc, clientaddr)
+        thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
       except:
-          self.setStatus("Error connecting to client")
+        self.setStatus("Error connecting to client")
 
 
   # check whether the addr is in the topo
@@ -184,10 +191,17 @@ class ChatClient(Frame):
       try:
         data = clientsoc.recv(self.buffsize)
         if not data:
-            break
-        self.addChat("%s:%s" % clientaddr, data)
-      except:
           break
+        data = str(data)
+        data = json.loads(data)
+        print "data:", data
+        if data["tag"] == _MESSAGE_:
+          self.addChat("%s:%s" % clientaddr, data)
+        elif data["tag"] == _BROADCAST_:
+          self.TOPO = data["TOPO"]
+          self.updateRoutingTable(data["sender"], data["routingTable"])
+      except:
+        break
     self.removeClient(clientsoc, clientaddr)
     clientsoc.close()
     self.setStatus("Client disconnected from %s:%s" % clientaddr)
@@ -211,8 +225,15 @@ class ChatClient(Frame):
         print "client:", client
         if self.routingTable[client]["state"] == _ON_:
           if client == self.sendaddr:
-            soc = self.routingTable[client]["clientsoc"]
-            soc.send(msg)
+            for client_soc in self.allClientAddrs:
+              if self.allClientAddrs[client_soc] == client:
+                datagram = {}
+                datagram["tag"] = _MESSAGE_
+                datagram["msg"] = msg
+                datagram["sender"] = self.addr
+                datagram["routingTable"] = self.routingTable
+                client_soc.send(json.dumps(datagram))
+                break
         else:
           pass
     else:
@@ -227,11 +248,40 @@ class ChatClient(Frame):
             soc = target_client["clientsoc"]
             soc.send(msg)
 
-  #get route
-  def getRoute(self):
+  #get route(LS and DV)
+  def getRoute(self, clientaddr, desaddr):
     _port = 1
+    _port = RA.LS(self.TOPO, clientaddr, desaddr)
     # return the port which the msg is sent to
     return _port
+
+  def broadcastRoutingTable(self, clientaddr):
+    for client in self.allClients:
+      if self.allClients[client] != clientaddr:
+        datagram = {}
+        datagram["tag"] = _BROADCAST_
+        datagram["sender"] = self.addr
+        datagram["TOPO"] = self.TOPO
+        datagram["routingTable"] = self.routingTable
+        client.send(json.dumps(datagram))
+
+  # update route table
+  def updateRoutingTable(self, clientaddr, clientRoutingTable):
+    isChanged = False
+    for addr in clientRoutingTable:
+      if addr != self.addr:
+        # addr is not in current routing table
+        if not self.routingTable.has_key(addr):
+          _port = self.routingTable[clientaddr]["port"]
+          routingTable[addr] = {"port": _port, "state": _ON_}
+          isChanged = True
+        
+        for client in self.routingTable:
+          print "client:", client
+          client.values()[0]["port"] = self.getRoute(client.keys()[0], addr)
+
+    if isChanged:
+      self.broadcastRoutingTable(clientaddr)
   
   def addChat(self, client, msg):
     self.receivedChats.config(state=NORMAL)
@@ -243,7 +293,16 @@ class ChatClient(Frame):
     self.allClientAddrs[clientsoc] = clientaddr
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
-    self.updateRoutingTable(clientsoc, clientaddr)
+    # TOPO?
+    
+    _port = self.allocatePort()
+    if _port:
+      print _port
+      self.routingTable[clientaddr] = {"port": _port, "state": _ON_}
+      self.ports[_port] = clientaddr
+    else:
+      print "Ports has been full!"
+    self.broadcastRoutingTable(clientaddr)
 
   def removeClient(self, clientsoc, clientaddr):
     print self.allClients
@@ -258,20 +317,13 @@ class ChatClient(Frame):
       if self.ports[port] == _EMPTY_:
         return port
     return 0
-
-  def updateRoutingTable(self, clientsoc, clientaddr):
-    _port = self.allocatePort()
-    if _port:
-      print _port
-      self.routingTable[clientaddr] = {"port": _port, "clientsoc": clientsoc, "state": _ON_}
-      self.ports[_port] = _BUSY_
-    else:
-      print "Ports has been full!"
   
   def setStatus(self, msg):
     self.statusLabel.config(text=msg)
     print msg
-      
+
+
+# main 
 def main():  
   root = Tk()
   app = ChatClient(root)
