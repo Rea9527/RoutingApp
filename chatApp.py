@@ -1,3 +1,4 @@
+#coding:utf-8
 from Tkinter import *
 from ttk import *
 import socket
@@ -294,7 +295,7 @@ class ChatClient(Frame):
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
     # TOPO?
-    
+
     _port = self.allocatePort()
     if _port:
       print _port
