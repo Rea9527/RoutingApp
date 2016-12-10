@@ -34,11 +34,9 @@ class ChatClient(Frame):
     self.serverSoc = None
     self.serverStatus = 0
     self.buffsize = 1024
-    self.allClients = {}
-    self.allClientAddrs = {}
+    self.clientSocs = {}
     self.ports = {"0": _EMPTY_, "1": _EMPTY_, "2": _EMPTY_, "3": _EMPTY_}
     self.counter = 0
-    self.TOPO = {}
 
     # routint table
     self.routingTable = {}
@@ -143,7 +141,6 @@ class ChatClient(Frame):
       if self.name == '':
         self.name = "%s:%s" % serveraddr
       self.addr = serveraddr
-      self.TOPO[self.addr] = []
     except:
       self.setStatus("Error setting up server")
 
@@ -171,11 +168,6 @@ class ChatClient(Frame):
       except:
         self.setStatus("Error connecting to client")
 
-
-  # check whether the addr is in the topo
-  def checkInTopo(self, addr):
-    
-    return 0
     
   def listenClients(self):
     while 1:
@@ -196,12 +188,10 @@ class ChatClient(Frame):
         data = str(data)
         data = json.loads(data)
         print "data:", data
-        print data["tag"] == _MESSAGE_
         if data["tag"] == _MESSAGE_:
           self.addChat("%s:%s" % clientaddr, data["msg"])
         elif data["tag"] == _BROADCAST_:
-          self.TOPO = data["TOPO"]
-          # self.updateRoutingTable(data["sender"], data["routingTable"])
+          self.updateRoutingTable(data["sender"], data["routingTable"])
       except:
         break
     self.removeClient(clientsoc, clientaddr)
@@ -218,68 +208,44 @@ class ChatClient(Frame):
         return
     self.addChat("me", msg)
 
-    # _port = self.getRoute()
-    _port = 1
-    if _port:
-
-      for client in self.routingTable:
-        print "client:", client
-        if self.routingTable[client]["state"] == _ON_:
-          if client == self.sendaddr:
-            for client_soc in self.allClientAddrs:
-              if self.allClientAddrs[client_soc] == client:
-                datagram = {}
-                datagram["tag"] = _MESSAGE_
-                datagram["msg"] = msg
-                datagram["sender"] = str(self.addr)
-                datagram["routingTable"] = str(self.routingTable)
-                client_soc.send(json.dumps(datagram))
-                break
-        else:
-          pass
-    else:
-      self.setStatus("Time out! Maybe the specified client is not on!")
-
-  # send to the port which is calculated by algorithm and send to the client
-  def sendToPort(self, _port):
     for client in self.routingTable:
-        target_client = self.routingTable[client]
-        if target_client["port"] == _port and target_client["state"] == _ON_:
-          if client == self.sendaddr:
-            soc = target_client["clientsoc"]
-            soc.send(msg)
+      print "client:", client
+      target_client = self.routingTable[client]
+      if target_client["state"] == _ON_ and client == self.sendaddr:
+        datagram = {}
+        datagram["tag"] = _MESSAGE_
+        datagram["msg"] = msg
+        datagram["sender"] = str(self.addr)
+        datagram["routingTable"] = str(self.routingTable)
+        _port = self.getPortByAlgorithm(self.addr, self.sendaddr)
+        if _port:
+          soc = self.clientSocs[self.ports[_port]]
+          soc.send(json.dumps(datagram))
+        break
+      else:
+        pass
 
   #get route(LS and DV)
-  def getRoute(self, clientaddr, desaddr):
+  def getPortByAlgorithm(self, clientaddr, desaddr):
     _port = 1
-    _port = RA.LS(self.TOPO, clientaddr, desaddr)
+    _port = RA.DV(self.addr, self.routingTable, clientRoutingTable)
     # return the port which the msg is sent to
-    return _port
+    return "0"
 
   def broadcastRoutingTable(self, clientaddr):
-    for client in self.allClients:
-      if self.allClients[client] != clientaddr:
+    for client in self.clientSocs:
+      if client != clientaddr:
         datagram = {}
         datagram["tag"] = _BROADCAST_
         datagram["sender"] = self.addr
-        datagram["TOPO"] = self.TOPO
         datagram["routingTable"] = self.routingTable
-        client.send(json.dumps(datagram))
+        soc = self.clientSocs[client]
+        soc.send(json.dumps(datagram))
 
   # update route table
   def updateRoutingTable(self, clientaddr, clientRoutingTable):
-    isChanged = False
-    for addr in clientRoutingTable:
-      if addr != self.addr:
-        # addr is not in current routing table
-        if not self.routingTable.has_key(addr):
-          _port = self.routingTable[clientaddr]["port"]
-          routingTable[addr] = {"port": _port, "state": _ON_}
-          isChanged = True
-        
-        for client in self.routingTable:
-          print "client:", client
-          client.values()[0]["port"] = self.getRoute(client.keys()[0], addr)
+
+    [self.routingTable, isChanged] = RA.DV(self.routingTable, clientRoutingTable)
 
     if isChanged:
       self.broadcastRoutingTable(clientaddr)
@@ -290,11 +256,9 @@ class ChatClient(Frame):
     self.receivedChats.config(state=DISABLED)
   
   def addClient(self, clientsoc, clientaddr):
-    self.allClients[clientsoc]=self.counter
-    self.allClientAddrs[clientsoc] = clientaddr
+    self.clientSocs[clientaddr] = clientsoc
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
-    # TOPO?
 
     _port = self.allocatePort()
     if _port:
@@ -303,15 +267,10 @@ class ChatClient(Frame):
       self.ports[_port] = clientaddr
     else:
       print "Ports has been full!"
-    # self.broadcastRoutingTable(clientaddr)
+    self.broadcastRoutingTable(clientaddr)
 
   def removeClient(self, clientsoc, clientaddr):
-    print self.allClients
-    self.friends.delete(self.allClients[clientsoc])
-    del self.allClients[clientsoc]
-    del self.allClientAddrs[clientsoc]
     self.routingTable[clientaddr]["state"] = _DOWN_
-    print self.allClients
 
   def allocatePort(self):
     for port in self.ports:
