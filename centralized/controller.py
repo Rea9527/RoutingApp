@@ -8,6 +8,9 @@ import RoutingAlgorithm as RA
 
 
 _DESTINATION_ = "DES"
+_PORT_ = "PORT"
+_TOPO_ = "TOPO"
+_FROM_CONTROLLER_ = "FROM CONTROLLER"
 
 class Controller(Frame):
 
@@ -85,7 +88,6 @@ class Controller(Frame):
 		  while 1:
 				buf = clientSoc.recv(self.buffsize)
 				print buf
-				print "buf:", tuple(json.loads(buf))
 				clientAddr = tuple(json.loads(buf))
 				break
 		  print "clientSoc: %s, clientAddr: %s", clientSoc, clientAddr
@@ -103,13 +105,21 @@ class Controller(Frame):
 				data = str(data)
 				data = json.loads(data)
 				print "data:", data
-				[sendAddr, ports, desAddr] = data["sender"], data["ports"], data["desAddr"]
-				port = RA.LS(self.TOPO, ports, sendAddr, desAddr)
-				port = "1"
-				datagram = {}
-				datagram["tag"] = _DESTINATION_
-				datagram["port"] = port
-				clientSoc.send(json.dumps(datagram))
+				if data["tag"] == _TOPO_:
+					desAddr = data["desAddr"]
+					self.TOPO[clientAddr].append(tuple(desAddr))
+					# print self.TOPO
+				else:
+					[sendAddr, ports, desAddr] = tuple(data["sender"]), data["ports"], tuple(data["desAddr"])
+					port = RA.LS(self.TOPO, ports, sendAddr, desAddr)
+					# port = "1"
+					datagram = {}
+					datagram["tag"] = _FROM_CONTROLLER_
+					datagram["desAddr"] = desAddr
+					datagram["srcAddr"] = data["srcAddr"]
+					datagram["msg"] = data["msg"]
+					datagram["port"] = port
+					clientSoc.send(json.dumps(datagram))
 			except:
 				break
 		self.removeClient(clientSoc, clientAddr)
@@ -119,6 +129,7 @@ class Controller(Frame):
 	def addClient(self, clientSoc, clientAddr):
 		self.clientSocs[clientAddr] = clientSoc
 		self.counter += 1
+		self.TOPO[clientAddr] = []
 
 	def removeClient(self, clientSoc, clientAddr):
 		pass

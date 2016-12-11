@@ -6,22 +6,17 @@ import thread
 import json
 import RoutingAlgorithm as RA
 
-# topo
-# TOPO = { "A": [ "B", "E" ] ,
-#          "B": [ "A", "C", "D" ] ,
-#          "C": [ "D", "E" ] ,
-#          "D": [ "B", "C", "E" ] ,
-#          "E": [ "A", "C", "D" ] }
 
 _EMPTY_ = 0
 _BUSY_ = 1
 
-_ON_ = 1
-_DOWN_ = 0
 
 _MESSAGE_ = "MESSAGE"
-_BROADCAST_ = "BROADCAST"
 _DESTINATION_ = "DES"
+_TO_CONTROLLER_ = "TO CONTROLLER"
+_FROM_CONTROLLER_ = "FROM CONTROLLER"
+_PORT_ = "PORT"
+_TOPO_ = "TOPO"
 
 class ChatClient(Frame):
   
@@ -223,17 +218,39 @@ class ChatClient(Frame):
         data = json.loads(data)
         print "data:", data
         if data["tag"] == _MESSAGE_:
-          self.addChat("%s:%s" % clientaddr, data["msg"])
-        elif data["tag"] == _DESTINATION_:
-          print _DESTINATION_
-          datagram = {}
-          datagram["tag"] = _MESSAGE_
-          datagram["sender"] = str(self.addr)
-          datagram["msg"] = self.msg
+          addr = tuple(data["srcAddr"])
+          self.addChat("%s:%s" % addr, data["msg"])
+
+        elif data["tag"] == _FROM_CONTROLLER_:
+          print _FROM_CONTROLLER_
+
           port = str(data["port"])
-          addr = self.ports[port]
-          soc = self.clientSocs[addr]
-          soc.send(json.dumps(datagram))
+          if port == "":
+            self.setStatus("Address is not exist!")
+          else:
+            addr = self.ports[port]
+            datagram = {}
+            datagram["sender"] = str(self.addr)
+            datagram["msg"] = data["msg"]
+            datagram["desAddr"] = data["desAddr"]
+            datagram["srcAddr"] = data["srcAddr"]
+            print "addr&desAddr:", addr, tuple(datagram["desAddr"])
+            if addr == tuple(datagram["desAddr"]):
+              datagram["tag"] = _MESSAGE_
+            else:
+              datagram["tag"] = _TO_CONTROLLER_
+            soc = self.clientSocs[addr]
+            soc.send(json.dumps(datagram))
+
+        elif data["tag"] == _TO_CONTROLLER_:
+          datagram = {}
+          datagram["tag"] = _TO_CONTROLLER_
+          datagram["sender"] = self.addr
+          datagram["ports"] = self.ports
+          datagram["msg"] = data["msg"]
+          datagram["srcAddr"] = data["srcAddr"]
+          datagram["desAddr"] = data["desAddr"]
+          self.adminSoc.send(json.dumps(datagram))
       # except:
       #   break
     self.removeClient(clientsoc, clientaddr)
@@ -251,9 +268,12 @@ class ChatClient(Frame):
     self.addChat("me", msg)
 
     datagram = {}
-    datagram["sender"] = str(self.addr)
-    datagram["ports"] = str(self.ports)
-    datagram["desAddr"] = str(self.sendaddr)
+    datagram["tag"] = _TO_CONTROLLER_
+    datagram["sender"] = self.addr
+    datagram["msg"] = self.msg
+    datagram["ports"] = self.ports
+    datagram["srcAddr"] = self.addr
+    datagram["desAddr"] = self.sendaddr
     self.adminSoc.send(json.dumps(datagram))
 
   
@@ -264,15 +284,20 @@ class ChatClient(Frame):
     self.receivedChats.config(state=DISABLED)
   
   def addClient(self, clientsoc, clientaddr):
-    self.clientSocs[clientaddr] = clientsoc
+    self.clientSocs[tuple(clientaddr)] = clientsoc
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
 
     _port = self.allocatePort()
     if _port:
-      self.ports[_port] = clientaddr
+      self.ports[_port] = tuple(clientaddr)
     else:
       print "Ports has been full!"
+
+    datagram = {}
+    datagram["tag"] = _TOPO_
+    datagram["desAddr"] = tuple(clientaddr)
+    self.adminSoc.send(json.dumps(datagram))
 
   def removeClient(self, clientsoc, clientaddr):
     pass
