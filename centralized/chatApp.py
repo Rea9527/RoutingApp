@@ -139,11 +139,13 @@ class ChatClient(Frame):
       self.admin = False;
       self.adminSoc.close()
 
-    adminaddr = (self.serverIPVar.get().replace(' ',''), int(self.serverPortVar.get().replace(' ','')))
+    adminAddr = (self.centerIPVar.get().replace(' ',''), int(self.centerPortVar.get().replace(' ','')))
     try:
       self.adminSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      self.adminSoc.connect(adminaddr)
-      self.setStatus("Connect to controller %s:%s" % adminaddr)
+      self.adminSoc.connect(adminAddr)
+      self.adminSoc.send(json.dumps(self.addr))
+      self.setStatus("Connect to controller %s:%s" % adminAddr)
+      thread.start_new_thread(self.handleClientMessages, (self.adminSoc, adminAddr))
     except:
       self.setStatus("Controller addr error!")
 
@@ -183,23 +185,27 @@ class ChatClient(Frame):
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
     else:
-      # try:
+      try:
         clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print "clientsoc:", clientsoc.getsockname()
-        # clientsoc.bind(self.addr)
+        # print "clientsoc:", clientsoc.getsockname()
         clientsoc.connect(clientaddr)
+        clientsoc.send(json.dumps(self.addr))
         # print clientsoc.getsockname(), " ", clientsoc.getpeername()
         self.setStatus("Connected to client on %s:%s" % clientaddr)
         self.addClient(clientsoc, clientaddr)
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-      # except:
-      #   self.setStatus("Error connecting to client")
+      except:
+        self.setStatus("Error connecting to client")
 
     
   def listenClients(self):
     while 1:
       [clientsoc, clientaddr] = self.serverSoc.accept()
-      # print "soc:", clientsoc.getpeername()
+      while 1:
+        buf = clientsoc.recv(self.buffsize)
+        clientaddr = tuple(json.loads(buf))
+        break
+
       print "clientsoc: %s, clientaddr: %s", clientsoc, clientaddr
       self.setStatus("Client connected from %s:%s" % clientaddr)
       self.addClient(clientsoc, clientaddr)
@@ -209,7 +215,7 @@ class ChatClient(Frame):
 
   def handleClientMessages(self, clientsoc, clientaddr):
     while 1:
-      try:
+      # try:
         data = clientsoc.recv(self.buffsize)
         if not data:
           break
@@ -219,16 +225,17 @@ class ChatClient(Frame):
         if data["tag"] == _MESSAGE_:
           self.addChat("%s:%s" % clientaddr, data["msg"])
         elif data["tag"] == _DESTINATION_:
+          print _DESTINATION_
           datagram = {}
           datagram["tag"] = _MESSAGE_
           datagram["sender"] = str(self.addr)
-          datagram["mgs"] = self.msg
-          port = data["port"]
+          datagram["msg"] = self.msg
+          port = str(data["port"])
           addr = self.ports[port]
           soc = self.clientSocs[addr]
           soc.send(json.dumps(datagram))
-      except:
-        break
+      # except:
+      #   break
     self.removeClient(clientsoc, clientaddr)
     clientsoc.close()
     self.setStatus("Client disconnected from %s:%s" % clientaddr)
@@ -263,7 +270,6 @@ class ChatClient(Frame):
 
     _port = self.allocatePort()
     if _port:
-      print "port:", _port
       self.ports[_port] = clientaddr
     else:
       print "Ports has been full!"

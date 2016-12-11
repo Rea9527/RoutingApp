@@ -27,6 +27,6 @@ def LS(TOPO, ports, srcaddr, desaddr):
 
 # 返回值，数组类型，[更新后的主机路由表, 是否有更新（0或1）]
 def DV(addr, selfRoutingTable, clientRoutingTable):
-	pass
+	return [selfRoutingTable, 1]
 
 

@@ -7,7 +7,7 @@ import json
 import RoutingAlgorithm as RA
 
 
-_DESTINATION_ = "_DES_"
+_DESTINATION_ = "DES"
 
 class Controller(Frame):
 
@@ -81,6 +81,13 @@ class Controller(Frame):
 	def listenClients(self):
 		while 1:
 		  clientSoc, clientAddr = self.adminSoc.accept()
+		  print clientSoc
+		  while 1:
+				buf = clientSoc.recv(self.buffsize)
+				print buf
+				print "buf:", tuple(json.loads(buf))
+				clientAddr = tuple(json.loads(buf))
+				break
 		  print "clientSoc: %s, clientAddr: %s", clientSoc, clientAddr
 		  self.setStatus("Client connected from %s:%s" % clientAddr)
 		  self.addClient(clientSoc, clientAddr)
@@ -90,7 +97,7 @@ class Controller(Frame):
 	def handleClientMessages(self, clientSoc, clientAddr):
 		while 1:
 			try:
-				data = clientsoc.recv(self.buffsize)
+				data = clientSoc.recv(self.buffsize)
 				if not data:
 					break
 				data = str(data)
@@ -98,6 +105,7 @@ class Controller(Frame):
 				print "data:", data
 				[sendAddr, ports, desAddr] = data["sender"], data["ports"], data["desAddr"]
 				port = RA.LS(self.TOPO, ports, sendAddr, desAddr)
+				port = "1"
 				datagram = {}
 				datagram["tag"] = _DESTINATION_
 				datagram["port"] = port
@@ -116,8 +124,11 @@ class Controller(Frame):
 		pass
 
 	def setStatus(self, msg):
-	  self.statusLabel.config(text=msg)
-	  print msg
+		self.receivedChats.config(state=NORMAL)
+		self.receivedChats.insert("end",msg+"\n")
+		self.receivedChats.config(state=DISABLED)
+		self.statusLabel.config(text=msg)
+		print msg
 
 # main 
 def main():  

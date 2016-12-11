@@ -19,9 +19,6 @@ _BUSY_ = 1
 _ON_ = 1
 _DOWN_ = 0
 
-_DV_ALGORITHM_ = "DV"
-_LS_ALGORITHM_ = "LS"
-
 _MESSAGE_ = "MESSAGE"
 _BROADCAST_ = "BROADCAST"
 
@@ -158,20 +155,25 @@ class ChatClient(Frame):
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
     else:
-      try:
+      # try:
         clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # print "clientsoc:", clientsoc
         clientsoc.connect(clientaddr)
+        clientsoc.send(json.dumps(self.addr))
         self.setStatus("Connected to client on %s:%s" % clientaddr)
         self.addClient(clientsoc, clientaddr)
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-      except:
-        self.setStatus("Error connecting to client")
+      # except:
+      #   self.setStatus("Error connecting to client")
 
     
   def listenClients(self):
     while 1:
       clientsoc, clientaddr = self.serverSoc.accept()
+      while 1:
+        buf = clientsoc.recv(self.buffsize)
+        clientaddr = tuple(json.loads(buf))
+        break
       print "clientsoc: %s, clientaddr: %s", clientsoc, clientaddr
       self.setStatus("Client connected from %s:%s" % clientaddr)
       self.addClient(clientsoc, clientaddr)
@@ -217,20 +219,14 @@ class ChatClient(Frame):
         datagram["msg"] = msg
         datagram["sender"] = str(self.addr)
         datagram["routingTable"] = str(self.routingTable)
-        _port = self.getPortByAlgorithm(self.addr, self.sendaddr)
-        if _port:
-          soc = self.clientSocs[self.ports[_port]]
-          soc.send(json.dumps(datagram))
+
+        _port = target_client["port"]
+        addr = self.ports[_port]
+        soc = self.clientSocs[addr]
+        soc.send(json.dumps(datagram))
         break
       else:
         pass
-
-  #get route(LS and DV)
-  def getPortByAlgorithm(self, clientaddr, desaddr):
-    _port = 1
-    _port = RA.DV(self.addr, self.routingTable, clientRoutingTable)
-    # return the port which the msg is sent to
-    return "0"
 
   def broadcastRoutingTable(self, clientaddr):
     for client in self.clientSocs:
@@ -245,7 +241,7 @@ class ChatClient(Frame):
   # update route table
   def updateRoutingTable(self, clientaddr, clientRoutingTable):
 
-    [self.routingTable, isChanged] = RA.DV(self.routingTable, clientRoutingTable)
+    [self.routingTable, isChanged] = RA.DV(self.addr, self.routingTable, clientRoutingTable)
 
     if isChanged:
       self.broadcastRoutingTable(clientaddr)
@@ -262,7 +258,7 @@ class ChatClient(Frame):
 
     _port = self.allocatePort()
     if _port:
-      print _port
+      print "port:", _port
       self.routingTable[clientaddr] = {"port": _port, "state": _ON_}
       self.ports[_port] = clientaddr
     else:
