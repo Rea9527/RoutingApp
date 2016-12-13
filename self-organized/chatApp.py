@@ -42,7 +42,7 @@ class ChatClient(Frame):
     self.root.title("Routing")
     ScreenSizeX = self.root.winfo_screenwidth()
     ScreenSizeY = self.root.winfo_screenheight()
-    self.FrameSizeX  = 900
+    self.FrameSizeX  = 850
     self.FrameSizeY  = 600
     FramePosX   = (ScreenSizeX - self.FrameSizeX)/2
     FramePosY   = (ScreenSizeY - self.FrameSizeY)/2
@@ -155,7 +155,7 @@ class ChatClient(Frame):
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
     else:
-      # try:
+      try:
         clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # print "clientsoc:", clientsoc
         clientsoc.connect(clientaddr)
@@ -163,8 +163,8 @@ class ChatClient(Frame):
         self.setStatus("Connected to client on %s:%s" % clientaddr)
         self.addClient(clientsoc, clientaddr)
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-      # except:
-      #   self.setStatus("Error connecting to client")
+      except:
+        self.setStatus("Error connecting to client")
 
     
   def listenClients(self):
@@ -211,7 +211,6 @@ class ChatClient(Frame):
     self.addChat("me", msg)
 
     for client in self.routingTable:
-      print "client:", client
       target_client = self.routingTable[client]
       if target_client["state"] == _ON_ and client == self.sendaddr:
         datagram = {}
@@ -258,7 +257,6 @@ class ChatClient(Frame):
 
     _port = self.allocatePort()
     if _port:
-      print "port:", _port
       self.routingTable[clientaddr] = {"port": _port, "state": _ON_}
       self.ports[_port] = clientaddr
     else:
