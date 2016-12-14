@@ -37,6 +37,9 @@ class ChatClient(Frame):
 
     # routint table
     self.routingTable = {}
+
+    # dv
+    self.dv = {}
   
   def initUI(self):
     self.root.title("Routing")
@@ -138,6 +141,7 @@ class ChatClient(Frame):
       if self.name == '':
         self.name = "%s:%s" % serveraddr
       self.addr = serveraddr
+      self.dv = {self.addr: 0}
     except:
       self.setStatus("Error setting up server")
 
@@ -155,7 +159,7 @@ class ChatClient(Frame):
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
     else:
-      try:
+      # try:
         clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # print "clientsoc:", clientsoc
         clientsoc.connect(clientaddr)
@@ -163,10 +167,10 @@ class ChatClient(Frame):
         self.setStatus("Connected to client on %s:%s" % clientaddr)
         self.addClient(clientsoc, clientaddr)
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-      except:
-        self.setStatus("Error connecting to client")
+      # except:
+      #   self.setStatus("Error connecting to client")
 
-    
+
   def listenClients(self):
     while 1:
       clientsoc, clientaddr = self.serverSoc.accept()
@@ -174,7 +178,7 @@ class ChatClient(Frame):
         buf = clientsoc.recv(self.buffsize)
         clientaddr = tuple(json.loads(buf))
         break
-      print "clientsoc: %s, clientaddr: %s", clientsoc, clientaddr
+      print "clientsoc: ", clientsoc, " clientaddr: ",  clientaddr
       self.setStatus("Client connected from %s:%s" % clientaddr)
       self.addClient(clientsoc, clientaddr)
       thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
@@ -183,19 +187,21 @@ class ChatClient(Frame):
 
   def handleClientMessages(self, clientsoc, clientaddr):
     while 1:
-      try:
+      # try:
         data = clientsoc.recv(self.buffsize)
         if not data:
           break
         data = str(data)
         data = json.loads(data)
-        print "data:", data
+        # print "data:", data
         if data["tag"] == _MESSAGE_:
           self.addChat("%s:%s" % clientaddr, data["msg"])
         elif data["tag"] == _BROADCAST_:
-          self.updateRoutingTable(data["sender"], data["routingTable"])
-      except:
-        break
+          print "received broadcast from: ", data["sender"]
+          [addr_sender, dv_received] = tuple(data["sender"]), data["dv"]
+          self.updateRoutingTable(addr_sender, dv_received)
+      # except:
+      #   break
     self.removeClient(clientsoc, clientaddr)
     clientsoc.close()
     self.setStatus("Client disconnected from %s:%s" % clientaddr)
@@ -207,17 +213,17 @@ class ChatClient(Frame):
       return
     msg = self.chatVar.get().replace(' ','')
     if msg == '':
-        return
+      return
     self.addChat("me", msg)
 
     for client in self.routingTable:
       target_client = self.routingTable[client]
+      print "routingTable:", self.routingTable
       if target_client["state"] == _ON_ and client == self.sendaddr:
         datagram = {}
         datagram["tag"] = _MESSAGE_
         datagram["msg"] = msg
         datagram["sender"] = str(self.addr)
-        datagram["routingTable"] = str(self.routingTable)
 
         _port = target_client["port"]
         addr = self.ports[_port]
@@ -227,23 +233,30 @@ class ChatClient(Frame):
       else:
         pass
 
-  def broadcastRoutingTable(self, clientaddr):
+  def broadcastRoutingTable(self):
+    print self.addr, ': broadcast dv!!'
     for client in self.clientSocs:
-      if client != clientaddr:
-        datagram = {}
-        datagram["tag"] = _BROADCAST_
-        datagram["sender"] = self.addr
-        datagram["routingTable"] = self.routingTable
-        soc = self.clientSocs[client]
-        soc.send(json.dumps(datagram))
+      datagram = {}
+      datagram["tag"] = _BROADCAST_
+      datagram["sender"] = self.addr
+      datagram["routingTable"] = self.routingTable
+      datagram["dv"] = self.dv
+      datagram = json.dumps(datagram, skipkeys=True, ensure_ascii=False)
+      soc = self.clientSocs[client]
+      soc.send(datagram)
 
   # update route table
-  def updateRoutingTable(self, clientaddr, clientRoutingTable):
+  def updateRoutingTable(self, addr_sender, dv_received):
 
-    [self.routingTable, isChanged] = RA.DV(self.addr, self.routingTable, clientRoutingTable)
+    [isChanged, self.dv, self.routingTable, self.ports] = RA.DV(self.addr,
+                                                              addr_sender,
+                                                              self.dv,
+                                                              dv_received,
+                                                              self.routingTable,
+                                                              self.ports)
 
     if isChanged:
-      self.broadcastRoutingTable(clientaddr)
+      self.broadcastRoutingTable()
   
   def addChat(self, client, msg):
     self.receivedChats.config(state=NORMAL)
@@ -251,6 +264,7 @@ class ChatClient(Frame):
     self.receivedChats.config(state=DISABLED)
   
   def addClient(self, clientsoc, clientaddr):
+    clientaddr = tuple(clientaddr)
     self.clientSocs[clientaddr] = clientsoc
     self.counter += 1
     self.friends.insert(self.counter,"%s:%s" % clientaddr)
@@ -258,10 +272,11 @@ class ChatClient(Frame):
     _port = self.allocatePort()
     if _port:
       self.routingTable[clientaddr] = {"port": _port, "state": _ON_}
+      self.dv[clientaddr] = 1
       self.ports[_port] = clientaddr
     else:
       print "Ports has been full!"
-    self.broadcastRoutingTable(clientaddr)
+    self.broadcastRoutingTable()
 
   def removeClient(self, clientsoc, clientaddr):
     self.routingTable[clientaddr]["state"] = _DOWN_
