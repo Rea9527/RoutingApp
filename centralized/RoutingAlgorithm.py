@@ -59,18 +59,3 @@ def hasnot_keys(TOPO, N):
 			return True
 	return False
 
-
-# DV
-# addr, 主机地址，tuple类型，如("192.168.1.1", 8090)
-
-# selfRoutingTable, clientRoutingTable分别为主机和客户机的路由表，dist类型
-# 如 selfRoutingTable = {("192.168.1.2", 8090): {"port": "0", "state": 1},
-# 						("192.168.1.3", 8090): {"port": "1", "state": 1},
-#						("192.168.1.4", 8091): {"port": "0", "state": 1} }
-# 表示到这三个IP，应该从哪个端口（port）出去
-
-# 返回值，数组类型，[更新后的主机路由表, 是否有更新（0或1）]
-def DV(addr, selfRoutingTable, clientRoutingTable):
-	return [selfRoutingTable, 1]
-
-
