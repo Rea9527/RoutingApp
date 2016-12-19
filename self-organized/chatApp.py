@@ -15,6 +15,11 @@ _DOWN_ = 0
 _MESSAGE_ = "MESSAGE"
 _BROADCAST_ = "BROADCAST"
 
+def convert_to_builtin_type(obj):
+  d = {}
+  d.update(obj.__dict__)
+  return d
+
 class ChatClient(Frame):
   
   def __init__(self, root):
@@ -38,7 +43,7 @@ class ChatClient(Frame):
     self.root.title("Routing")
     ScreenSizeX = self.root.winfo_screenwidth()
     ScreenSizeY = self.root.winfo_screenheight()
-    self.FrameSizeX  = 850
+    self.FrameSizeX  = 810
     self.FrameSizeY  = 600
     FramePosX   = (ScreenSizeX - self.FrameSizeX)/2
     FramePosY   = (ScreenSizeY - self.FrameSizeY)/2
@@ -135,7 +140,7 @@ class ChatClient(Frame):
 
   def handleSendIP(self):
     sendaddr = (self.sendIPVar.get().replace(' ',''), int(self.sendPortVar.get().replace(' ','')))
-    self.sendaddr = sendaddr
+    self.sendaddr = tuple(sendaddr)
     self.setStatus("Set client %s:%s to send" % sendaddr)
 
   
@@ -147,7 +152,7 @@ class ChatClient(Frame):
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
     else:
-      # try:
+      try:
         clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # print "clientsoc:", clientsoc
         clientsoc.connect(clientaddr)
@@ -155,8 +160,8 @@ class ChatClient(Frame):
         self.setStatus("Connected to client on %s:%s" % clientaddr)
         self.addClient(clientsoc, clientaddr)
         thread.start_new_thread(self.handleClientMessages, (clientsoc, clientaddr))
-      # except:
-      #   self.setStatus("Error connecting to client")
+      except:
+        self.setStatus("Error connecting to client")
 
 
   def listenClients(self):
@@ -183,9 +188,32 @@ class ChatClient(Frame):
         data = json.loads(data)
         # print "data:", data
         if data["tag"] == _MESSAGE_:
-          self.addChat("%s:%s" % clientaddr, data["msg"])
+          [data["target"], data["sender"]] = tuple(data["target"]), tuple(data["sender"])
+          if data["target"] == self.addr:
+            self.addChat("%s:%s" % data["sender"], data["msg"])
+          else:
+            # print "target:", data["target"]
+            self.sendaddr = data["target"]
+            for client in self.routingTable:
+              target_client = self.routingTable[client]
+              if target_client["state"] == _ON_ and client == self.sendaddr:
+                datagram = {}
+                datagram["tag"] = _MESSAGE_
+                datagram["msg"] = data["msg"]
+                datagram["sender"] = data["sender"]
+                datagram["target"] = self.sendaddr
+
+                _port = target_client["port"]
+                addr = self.ports[_port]
+                soc = self.clientSocs[addr]
+                # print soc, target_client, _port
+                soc.send(json.dumps(datagram, ensure_ascii=False))
+                break
+              else:
+                pass
         elif data["tag"] == _BROADCAST_:
-          [addr_sender, dv_received] = tuple(data["sender"]), data["dv"]
+          [addr_sender, dv_received] = tuple(data["sender"]), eval(data["dv"])
+          # print addr_sender, dv_received
           self.updateRoutingTable(addr_sender, dv_received)
       except:
         break
@@ -198,23 +226,26 @@ class ChatClient(Frame):
     if self.serverStatus == 0:
       self.setStatus("Set server address first")
       return
-    msg = self.chatVar.get().replace(' ','')
-    if msg == '':
+    self.msg = self.chatVar.get().replace(' ','')
+    if self.msg == '':
       return
-    self.addChat("me", msg)
+    self.addChat("me", self.msg)
 
+    print "routing table:", self.routingTable
     for client in self.routingTable:
       target_client = self.routingTable[client]
       if target_client["state"] == _ON_ and client == self.sendaddr:
         datagram = {}
         datagram["tag"] = _MESSAGE_
-        datagram["msg"] = msg
-        datagram["sender"] = str(self.addr)
+        datagram["msg"] = self.msg
+        datagram["sender"] = self.addr
+        datagram["target"] = self.sendaddr
 
         _port = target_client["port"]
         addr = self.ports[_port]
         soc = self.clientSocs[addr]
-        soc.send(json.dumps(datagram))
+        # print soc, target_client, _port
+        soc.send(json.dumps(datagram, ensure_ascii=False))
         break
       else:
         pass
@@ -224,9 +255,8 @@ class ChatClient(Frame):
       datagram = {}
       datagram["tag"] = _BROADCAST_
       datagram["sender"] = self.addr
-      datagram["routingTable"] = self.routingTable
-      datagram["dv"] = self.dv
-      datagram = json.dumps(datagram, skipkeys=True, ensure_ascii=False)
+      datagram["dv"] = str(self.dv)
+      datagram = json.dumps(datagram, ensure_ascii=False)
       soc = self.clientSocs[client]
       soc.send(datagram)
 

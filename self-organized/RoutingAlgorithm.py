@@ -34,15 +34,16 @@ def DV(addr_self, addr_sender, dv_self, dv_received, routing_table, ports):
 					routing_table[addr]["port"] = port
 					break
             dv_changed = True
-        if not dv_self.has_key(addr) and addr_self != addr:
+        if (not dv_self.has_key(addr)) and addr_self != addr:
             dv_self[addr] = dv_received[addr] + 1
-            for port in ports:
-                if ports[port] == _EMPTY_:
-                    ports[port] = addr_sender
-                    routing_table[addr] = port
-                    break
+            _port = routing_table[addr_sender]["port"]
+            routing_table[addr] = {}
+            routing_table[addr]["port"] = _port
+            routing_table[addr]["state"] = 1
             dv_changed = True
 
     return [dv_changed, dv_self, routing_table, ports]
+
+
 
 
