@@ -32,21 +32,22 @@ class ChatClient(Frame):
     self.counter = 0
     self.admin = False;
     self.adminSoc = None;
+    self.name = ''
 
   
   def initUI(self):
     self.root.title("Routing")
     ScreenSizeX = self.root.winfo_screenwidth()
     ScreenSizeY = self.root.winfo_screenheight()
-    self.FrameSizeX  = 900
+    self.FrameSizeX  = 810
     self.FrameSizeY  = 600
     FramePosX   = (ScreenSizeX - self.FrameSizeX)/2
     FramePosY   = (ScreenSizeY - self.FrameSizeY)/2
     self.root.geometry("%sx%s+%s+%s" % (self.FrameSizeX,self.FrameSizeY,FramePosX,FramePosY))
     self.root.resizable(width=False, height=False)
     
-    padX = 10
-    padY = 10
+    padX = 5
+    padY = 5
     parentFrame = Frame(self.root)
     parentFrame.grid(padx=padX, pady=padY, stick=E+W+N+S)
 
@@ -64,14 +65,11 @@ class ChatClient(Frame):
 
     ipGroup = Frame(parentFrame)
     serverLabel = Label(ipGroup, text="Set: ")
-    self.nameVar = StringVar()
-    self.nameVar.set("SDH")
-    nameField = Entry(ipGroup, width=10, textvariable=self.nameVar)
     self.serverIPVar = StringVar()
     self.serverIPVar.set("127.0.0.1")
     serverIPField = Entry(ipGroup, width=15, textvariable=self.serverIPVar)
     self.serverPortVar = StringVar()
-    self.serverPortVar.set("8090")
+    self.serverPortVar.set("8091")
     serverPortField = Entry(ipGroup, width=5, textvariable=self.serverPortVar)
     serverSetButton = Button(ipGroup, text="Set", width=10, command=self.handleSetServer)
     addClientLabel = Label(ipGroup, text="Set Conn: ")
@@ -79,18 +77,17 @@ class ChatClient(Frame):
     self.clientIPVar.set("127.0.0.1")
     clientIPField = Entry(ipGroup, width=15, textvariable=self.clientIPVar)
     self.clientPortVar = StringVar()
-    self.clientPortVar.set("8091")
+    self.clientPortVar.set("8092")
     clientPortField = Entry(ipGroup, width=5, textvariable=self.clientPortVar)
     clientSetButton = Button(ipGroup, text="Add", width=10, command=self.handleSetConn)
     serverLabel.grid(row=0, column=0)
-    nameField.grid(row=0, column=1)
-    serverIPField.grid(row=0, column=2)
-    serverPortField.grid(row=0, column=3)
-    serverSetButton.grid(row=0, column=4, padx=5)
-    addClientLabel.grid(row=0, column=5)
-    clientIPField.grid(row=0, column=6)
-    clientPortField.grid(row=0, column=7)
-    clientSetButton.grid(row=0, column=8, padx=5)
+    serverIPField.grid(row=0, column=1)
+    serverPortField.grid(row=0, column=2)
+    serverSetButton.grid(row=0, column=3, padx=5)
+    addClientLabel.grid(row=0, column=4)
+    clientIPField.grid(row=0, column=5)
+    clientPortField.grid(row=0, column=6)
+    clientSetButton.grid(row=0, column=7, padx=5)
     
     readChatGroup = Frame(parentFrame)
     self.receivedChats = Text(readChatGroup, bg="white", width=60, height=26, state=DISABLED)
@@ -104,7 +101,7 @@ class ChatClient(Frame):
     self.sendIPVar.set("127.0.0.1")
     sendIPField = Entry(sendMsgGroup, width=15, textvariable=self.sendIPVar)
     self.sendPortVar = StringVar()
-    self.sendPortVar.set("8091")
+    self.sendPortVar.set("8092")
     sendPortField = Entry(sendMsgGroup, width=5, textvariable=self.sendPortVar)
     sendSetButton = Button(sendMsgGroup, text="Set", width=10, command=self.handleSendIP)
     sendLabel.grid(row=0, column=1)
@@ -121,18 +118,23 @@ class ChatClient(Frame):
 
     self.statusLabel = Label(parentFrame)
 
-    centerGroup.grid(row=0, column=0)
-    ipGroup.grid(row=1, column=0)
-    readChatGroup.grid(row=2, column=0)
-    sendMsgGroup.grid(row=3, column=0)
-    writeChatGroup.grid(row=4, column=0, pady=10)
-    self.statusLabel.grid(row=5, column=0)
+    self.statusLabel.grid(row=0, column=0)
+    centerGroup.grid(row=1, column=0)
+    ipGroup.grid(row=2, column=0)
+    readChatGroup.grid(row=3, column=0)
+    sendMsgGroup.grid(row=4, column=0)
+    writeChatGroup.grid(row=5, column=0, pady=10)
+
+    # self.friends.insert(0,"当前直连路由:")
 
 
   def handleSetCenter(self):
     if self.adminSoc != None:
       self.admin = False;
       self.adminSoc.close()
+    if self.serverStatus == 0:
+      self.setStatus("Error, set server address first")
+      return
 
     adminAddr = (self.centerIPVar.get().replace(' ',''), int(self.centerPortVar.get().replace(' ','')))
     try:
@@ -140,6 +142,7 @@ class ChatClient(Frame):
       self.adminSoc.connect(adminAddr)
       self.adminSoc.send(json.dumps(self.addr))
       self.setStatus("Connect to controller %s:%s" % adminAddr)
+      self.admin = True
       thread.start_new_thread(self.handleClientMessages, (self.adminSoc, adminAddr))
     except:
       self.setStatus("Controller addr error!")
@@ -159,9 +162,7 @@ class ChatClient(Frame):
       self.setStatus("Server listening on %s:%s" % serveraddr)
       thread.start_new_thread(self.listenClients,())
       self.serverStatus = 1
-      self.name = self.nameVar.get().replace(' ','')
-      if self.name == '':
-        self.name = "%s:%s" % serveraddr
+      self.name = "%s:%s" % serveraddr
       self.addr = serveraddr
     except:
       self.setStatus("Error setting up server")
@@ -174,8 +175,12 @@ class ChatClient(Frame):
   
   def handleSetConn(self):
     if self.serverStatus == 0:
-      self.setStatus("Set server address first")
+      self.setStatus("Error, set server address first")
       return
+    else:
+      if self.admin == False:
+        self.setStatus("Error, please connect to controller first")
+        return
     clientaddr = (self.clientIPVar.get().replace(' ',''), int(self.clientPortVar.get().replace(' ','')))
     if clientaddr == self.addr:
       print "You cannot connect to yourself!"
@@ -210,20 +215,20 @@ class ChatClient(Frame):
 
   def handleClientMessages(self, clientsoc, clientaddr):
     while 1:
-      # try:
+      try:
         data = clientsoc.recv(self.buffsize)
         if not data:
           break
         data = str(data)
         data = json.loads(data)
-        print "data:", data
+        # print "data:", data
         if data["tag"] == _MESSAGE_:
+          print("msg")
           addr = tuple(data["srcAddr"])
           self.addChat("%s:%s" % addr, data["msg"])
 
         elif data["tag"] == _FROM_CONTROLLER_:
-          print _FROM_CONTROLLER_
-
+          # print _FROM_CONTROLLER_
           port = str(data["port"])
           if port == "":
             self.setStatus("Address is not exist!")
@@ -234,7 +239,7 @@ class ChatClient(Frame):
             datagram["msg"] = data["msg"]
             datagram["desAddr"] = data["desAddr"]
             datagram["srcAddr"] = data["srcAddr"]
-            print "addr&desAddr:", addr, tuple(datagram["desAddr"])
+            # print "addr&desAddr:", addr, tuple(datagram["desAddr"])
             if addr == tuple(datagram["desAddr"]):
               datagram["tag"] = _MESSAGE_
             else:
@@ -251,8 +256,8 @@ class ChatClient(Frame):
           datagram["srcAddr"] = data["srcAddr"]
           datagram["desAddr"] = data["desAddr"]
           self.adminSoc.send(json.dumps(datagram))
-      # except:
-      #   break
+      except:
+        break
     self.removeClient(clientsoc, clientaddr)
     clientsoc.close()
     self.setStatus("Client disconnected from %s:%s" % clientaddr)
@@ -286,7 +291,7 @@ class ChatClient(Frame):
   def addClient(self, clientsoc, clientaddr):
     self.clientSocs[tuple(clientaddr)] = clientsoc
     self.counter += 1
-    self.friends.insert(self.counter,"%s:%s" % clientaddr)
+    self.friends.insert(self.counter + 1,"%s:%s" % clientaddr)
 
     _port = self.allocatePort()
     if _port:

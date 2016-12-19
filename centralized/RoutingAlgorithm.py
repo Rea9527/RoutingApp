@@ -23,7 +23,6 @@ def LS(TOPO, ports, srcaddr, desaddr):
 		else:
 			D.update({(key):[2147483647,srcaddr]})
 			pass
-	print "D:", D
 	D.update({(srcaddr):[0, srcaddr]})
 	F = sorted(D.items(), key=lambda D: D[1])[:]
 	while hasnot_keys(TOPO,N):

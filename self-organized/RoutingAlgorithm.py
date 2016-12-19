@@ -30,7 +30,7 @@ def DV(addr_self, addr_sender, dv_self, dv_received, routing_table, ports):
             dv_self[addr] = dv_received[addr] + 1
             for port in ports:
                 if ports[port] == addr_sender:
-					print "routing_table:", routing_table
+					# print "routing_table:", routing_table
 					routing_table[addr]["port"] = port
 					break
             dv_changed = True

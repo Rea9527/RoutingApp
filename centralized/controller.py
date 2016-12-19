@@ -41,6 +41,8 @@ class Controller(Frame):
 		parentFrame = Frame(self.root)
 		parentFrame.grid(padx=padX, pady=padY, stick=E+W+N+S)
 
+		self.statusLabel = Label(parentFrame)
+
 		centerGroup = Frame(parentFrame)
 		self.centerIPVar = StringVar()
 		self.centerIPVar.set("127.0.0.1")
@@ -48,7 +50,7 @@ class Controller(Frame):
 		self.centerPortVar = StringVar()
 		self.centerPortVar.set("8090")
 		centerPortField = Entry(centerGroup, width=5, textvariable=self.centerPortVar)
-		centerSetButton = Button(centerGroup, text="SetCenter", width=12, command=self.handleSetCenter)
+		centerSetButton = Button(centerGroup, text="SetController", width=12, command=self.handleSetCenter)
 		centerIPField.grid(row=0, column=0)
 		centerPortField.grid(row=0, column=1)
 		centerSetButton.grid(row=0, column=2)
@@ -59,11 +61,10 @@ class Controller(Frame):
 		self.receivedChats.grid(row=0, column=0, sticky=W+N+S, padx = (0,10))
 		self.friends.grid(row=0, column=1, sticky=E+N+S)
 
-		self.statusLabel = Label(parentFrame)
-
-		centerGroup.grid(row=0, column=0)
-		readChatGroup.grid(row=1, column=0)
-		self.statusLabel.grid(row=2, column=0)
+		self.statusLabel.grid(row=0, column=0)
+		centerGroup.grid(row=1, column=0)
+		readChatGroup.grid(row=2, column=0)
+		
 
 	def handleSetCenter(self):
 		if self.adminSoc != None:
@@ -87,7 +88,6 @@ class Controller(Frame):
 		  print clientSoc
 		  while 1:
 				buf = clientSoc.recv(self.buffsize)
-				print buf
 				clientAddr = tuple(json.loads(buf))
 				break
 		  print "clientSoc: %s, clientAddr: %s", clientSoc, clientAddr
@@ -104,7 +104,6 @@ class Controller(Frame):
 					break
 				data = str(data)
 				data = json.loads(data)
-				print "data:", data
 				if data["tag"] == _TOPO_:
 					desAddr = data["desAddr"]
 					self.TOPO[clientAddr].append(tuple(desAddr))

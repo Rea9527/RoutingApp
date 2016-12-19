@@ -6,13 +6,6 @@ import thread
 import json
 import RoutingAlgorithm as RA
 
-# topo
-# TOPO = { "A": [ "B", "E" ] ,
-#          "B": [ "A", "C", "D" ] ,
-#          "C": [ "D", "E" ] ,
-#          "D": [ "B", "C", "E" ] ,
-#          "E": [ "A", "C", "D" ] }
-
 _EMPTY_ = 0
 _BUSY_ = 1
 
@@ -59,9 +52,6 @@ class ChatClient(Frame):
     
     ipGroup = Frame(parentFrame)
     serverLabel = Label(ipGroup, text="Set: ")
-    self.nameVar = StringVar()
-    self.nameVar.set("SDH")
-    nameField = Entry(ipGroup, width=10, textvariable=self.nameVar)
     self.serverIPVar = StringVar()
     self.serverIPVar.set("127.0.0.1")
     serverIPField = Entry(ipGroup, width=15, textvariable=self.serverIPVar)
@@ -78,14 +68,13 @@ class ChatClient(Frame):
     clientPortField = Entry(ipGroup, width=5, textvariable=self.clientPortVar)
     clientSetButton = Button(ipGroup, text="Add", width=10, command=self.handleSetConn)
     serverLabel.grid(row=0, column=0)
-    nameField.grid(row=0, column=1)
-    serverIPField.grid(row=0, column=2)
-    serverPortField.grid(row=0, column=3)
-    serverSetButton.grid(row=0, column=4, padx=5)
-    addClientLabel.grid(row=0, column=5)
-    clientIPField.grid(row=0, column=6)
-    clientPortField.grid(row=0, column=7)
-    clientSetButton.grid(row=0, column=8, padx=5)
+    serverIPField.grid(row=0, column=1)
+    serverPortField.grid(row=0, column=2)
+    serverSetButton.grid(row=0, column=3, padx=5)
+    addClientLabel.grid(row=0, column=4)
+    clientIPField.grid(row=0, column=5)
+    clientPortField.grid(row=0, column=6)
+    clientSetButton.grid(row=0, column=7, padx=5)
     
     readChatGroup = Frame(parentFrame)
     self.receivedChats = Text(readChatGroup, bg="white", width=60, height=27, state=DISABLED)
@@ -116,11 +105,12 @@ class ChatClient(Frame):
 
     self.statusLabel = Label(parentFrame)
 
-    ipGroup.grid(row=0, column=0)
-    readChatGroup.grid(row=1, column=0)
-    sendMsgGroup.grid(row=2, column=0)
-    writeChatGroup.grid(row=3, column=0, pady=10)
-    self.statusLabel.grid(row=4, column=0)
+    self.statusLabel.grid(row=0, column=0)
+    ipGroup.grid(row=1, column=0)
+    readChatGroup.grid(row=2, column=0)
+    sendMsgGroup.grid(row=3, column=0)
+    writeChatGroup.grid(row=4, column=0, pady=10)
+    
 
     
   def handleSetServer(self):
@@ -137,9 +127,7 @@ class ChatClient(Frame):
       self.setStatus("Server listening on %s:%s" % serveraddr)
       thread.start_new_thread(self.listenClients,())
       self.serverStatus = 1
-      self.name = self.nameVar.get().replace(' ','')
-      if self.name == '':
-        self.name = "%s:%s" % serveraddr
+      self.name = "%s:%s" % serveraddr
       self.addr = serveraddr
       self.dv = {self.addr: 0}
     except:
@@ -187,7 +175,7 @@ class ChatClient(Frame):
 
   def handleClientMessages(self, clientsoc, clientaddr):
     while 1:
-      # try:
+      try:
         data = clientsoc.recv(self.buffsize)
         if not data:
           break
@@ -197,11 +185,10 @@ class ChatClient(Frame):
         if data["tag"] == _MESSAGE_:
           self.addChat("%s:%s" % clientaddr, data["msg"])
         elif data["tag"] == _BROADCAST_:
-          print "received broadcast from: ", data["sender"]
           [addr_sender, dv_received] = tuple(data["sender"]), data["dv"]
           self.updateRoutingTable(addr_sender, dv_received)
-      # except:
-      #   break
+      except:
+        break
     self.removeClient(clientsoc, clientaddr)
     clientsoc.close()
     self.setStatus("Client disconnected from %s:%s" % clientaddr)
@@ -218,7 +205,6 @@ class ChatClient(Frame):
 
     for client in self.routingTable:
       target_client = self.routingTable[client]
-      print "routingTable:", self.routingTable
       if target_client["state"] == _ON_ and client == self.sendaddr:
         datagram = {}
         datagram["tag"] = _MESSAGE_
@@ -234,7 +220,6 @@ class ChatClient(Frame):
         pass
 
   def broadcastRoutingTable(self):
-    print self.addr, ': broadcast dv!!'
     for client in self.clientSocs:
       datagram = {}
       datagram["tag"] = _BROADCAST_
